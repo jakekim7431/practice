@@ -1,403 +1,233 @@
-const canvas = document.getElementById('arena');
+const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
+const connEl = document.getElementById('conn');
 const scoreEl = document.getElementById('score');
 const massEl = document.getElementById('mass');
-const timeEl = document.getElementById('time');
-
 const overlayEl = document.getElementById('overlay');
-const gameOverEl = document.getElementById('gameOver');
-const finalTextEl = document.getElementById('finalText');
+const leadersEl = document.getElementById('leaders');
 
-const startBtn = document.getElementById('startBtn');
-const restartBtn = document.getElementById('restartBtn');
+let state = null;
+let myId = null;
+let connected = false;
 
-const WORLD_WIDTH = 4200;
-const WORLD_HEIGHT = 2800;
-const FOOD_COUNT = 450;
-const BOT_COUNT = 18;
+const input = { x: 0, y: 0 };
+const keys = { splitReady: true, ejectReady: true };
 
-const foodColors = ['#ffd166', '#f78c6b', '#4fd1c5', '#7aa2ff', '#ff7eb6'];
-
-let mouse = { x: canvas.width / 2, y: canvas.height / 2 };
-let running = false;
-let startTime = 0;
-let rafId = 0;
-
-let player;
-let foods;
-let bots;
-
-function randomBetween(min, max) {
-    return Math.random() * (max - min) + min;
+function wsUrl() {
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${proto}//${window.location.host}/ws`;
 }
 
-function clamp(value, min, max) {
-    return Math.max(min, Math.min(max, value));
+const ws = new WebSocket(wsUrl());
+
+ws.addEventListener('open', () => {
+  connected = true;
+  connEl.textContent = '연결됨';
+  overlayEl.classList.add('hidden');
+});
+
+ws.addEventListener('close', () => {
+  connected = false;
+  connEl.textContent = '연결 끊김';
+  overlayEl.textContent = '서버 연결이 끊어졌습니다. 새로고침 해주세요.';
+  overlayEl.classList.remove('hidden');
+});
+
+ws.addEventListener('message', (event) => {
+  const msg = JSON.parse(event.data);
+  if (msg.type !== 'state') return;
+  state = msg;
+  myId = msg.you;
+  updateHud();
+  updateLeaders();
+});
+
+function sendInput() {
+  if (!connected || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ type: 'input', x: input.x, y: input.y }));
 }
 
-function makeCell({ x, y, mass, color, name, isBot = false }) {
-    return {
-        x,
-        y,
-        mass,
-        r: Math.sqrt(mass) * 2,
-        color,
-        name,
-        isBot,
-        vx: 0,
-        vy: 0,
-        aiTimer: 0,
-        targetX: x,
-        targetY: y,
-    };
+function sendAction(key) {
+  if (!connected || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ type: 'action', key }));
 }
 
-function updateRadius(cell) {
-    cell.r = Math.sqrt(cell.mass) * 2;
+function findMe() {
+  if (!state) return null;
+  return state.players.find((p) => p.id === myId) || null;
 }
 
-function makeFood() {
-    return {
-        x: randomBetween(0, WORLD_WIDTH),
-        y: randomBetween(0, WORLD_HEIGHT),
-        r: randomBetween(2.6, 4.2),
-        value: randomBetween(0.9, 1.6),
-        color: foodColors[Math.floor(Math.random() * foodColors.length)],
-    };
-}
-
-function resetGame() {
-    player = makeCell({
-        x: WORLD_WIDTH / 2,
-        y: WORLD_HEIGHT / 2,
-        mass: 40,
-        color: '#47e0c6',
-        name: 'YOU',
-    });
-
-    foods = Array.from({ length: FOOD_COUNT }, makeFood);
-
-    bots = Array.from({ length: BOT_COUNT }, (_, i) =>
-        makeCell({
-            x: randomBetween(200, WORLD_WIDTH - 200),
-            y: randomBetween(200, WORLD_HEIGHT - 200),
-            mass: randomBetween(28, 95),
-            color: `hsl(${Math.floor(randomBetween(0, 360))} 80% 60%)`,
-            name: `BOT-${i + 1}`,
-            isBot: true,
-        }),
-    );
-}
-
-function getCamera() {
-    return {
-        x: player.x - canvas.width / 2,
-        y: player.y - canvas.height / 2,
-    };
+function centerOf(cells) {
+  if (!cells || cells.length === 0) return { x: 0, y: 0 };
+  const sum = cells.reduce((acc, c) => ({ x: acc.x + c.x, y: acc.y + c.y }), { x: 0, y: 0 });
+  return { x: sum.x / cells.length, y: sum.y / cells.length };
 }
 
 function worldToScreen(x, y, camera) {
-    return { x: x - camera.x, y: y - camera.y };
+  return { x: x - camera.x, y: y - camera.y };
 }
 
 function drawGrid(camera) {
-    const gridSize = 55;
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-    ctx.lineWidth = 1;
+  const size = 60;
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 1;
 
-    const startX = -((camera.x % gridSize) + gridSize) % gridSize;
-    const startY = -((camera.y % gridSize) + gridSize) % gridSize;
+  const startX = -((camera.x % size) + size) % size;
+  const startY = -((camera.y % size) + size) % size;
 
-    for (let x = startX; x < canvas.width; x += gridSize) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, canvas.height);
-        ctx.stroke();
-    }
+  for (let x = startX; x < canvas.width; x += size) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, canvas.height);
+    ctx.stroke();
+  }
 
-    for (let y = startY; y < canvas.height; y += gridSize) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(canvas.width, y);
-        ctx.stroke();
-    }
+  for (let y = startY; y < canvas.height; y += size) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(canvas.width, y);
+    ctx.stroke();
+  }
 }
 
-function drawFood(camera) {
-    for (const f of foods) {
-        const p = worldToScreen(f.x, f.y, camera);
-        if (p.x < -10 || p.y < -10 || p.x > canvas.width + 10 || p.y > canvas.height + 10) {
-            continue;
-        }
-        ctx.beginPath();
-        ctx.fillStyle = f.color;
-        ctx.arc(p.x, p.y, f.r, 0, Math.PI * 2);
-        ctx.fill();
-    }
+function drawBorder(camera) {
+  const topLeft = worldToScreen(0, 0, camera);
+  ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(topLeft.x, topLeft.y, state.world.width, state.world.height);
 }
 
-function drawCell(cell, camera) {
-    const p = worldToScreen(cell.x, cell.y, camera);
+function drawFoods(camera) {
+  for (const f of state.foods) {
+    const p = worldToScreen(f.x, f.y, camera);
+    if (p.x < -10 || p.y < -10 || p.x > canvas.width + 10 || p.y > canvas.height + 10) continue;
 
     ctx.beginPath();
-    ctx.fillStyle = cell.color;
-    ctx.arc(p.x, p.y, cell.r, 0, Math.PI * 2);
+    ctx.fillStyle = f.color;
+    ctx.arc(p.x, p.y, f.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  for (const b of state.bonusOrbs) {
+    const p = worldToScreen(b.x, b.y, camera);
+    if (p.x < -20 || p.y < -20 || p.x > canvas.width + 20 || p.y > canvas.height + 20) continue;
+
+    ctx.beginPath();
+    ctx.fillStyle = b.color;
+    ctx.arc(p.x, p.y, b.r, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
-    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 1;
     ctx.stroke();
-
-    if (cell.r > 16) {
-        ctx.fillStyle = 'rgba(255,255,255,0.95)';
-        ctx.font = `600 ${Math.min(cell.r * 0.55, 16)}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.fillText(cell.name, p.x, p.y + 4);
-    }
+  }
 }
 
-function drawWorldBorder(camera) {
-    const topLeft = worldToScreen(0, 0, camera);
-    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(topLeft.x, topLeft.y, WORLD_WIDTH, WORLD_HEIGHT);
-}
+function drawCell(cell, actor, camera, isMe) {
+  const p = worldToScreen(cell.x, cell.y, camera);
 
-function updatePlayer(dt) {
-    const centerX = canvas.width / 2;
-    const centerY = canvas.height / 2;
-    const dx = mouse.x - centerX;
-    const dy = mouse.y - centerY;
-    const dist = Math.hypot(dx, dy) || 1;
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.scale(cell.sx || 1, cell.sy || 1);
 
-    const dirX = dx / dist;
-    const dirY = dy / dist;
+  ctx.beginPath();
+  ctx.fillStyle = actor.color;
+  ctx.arc(0, 0, cell.r, 0, Math.PI * 2);
+  ctx.fill();
 
-    const baseSpeed = 210;
-    const speed = clamp(baseSpeed / Math.pow(player.mass, 0.22), 28, 180);
-    const force = clamp(dist / 140, 0, 1);
+  ctx.strokeStyle = isMe ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.3)';
+  ctx.lineWidth = isMe ? 2 : 1.1;
+  ctx.stroke();
 
-    player.vx = dirX * speed * force;
-    player.vy = dirY * speed * force;
+  ctx.restore();
 
-    player.x += player.vx * dt;
-    player.y += player.vy * dt;
-
-    player.x = clamp(player.x, player.r, WORLD_WIDTH - player.r);
-    player.y = clamp(player.y, player.r, WORLD_HEIGHT - player.r);
-}
-
-function chooseBotTarget(bot) {
-    const danger = player.mass > bot.mass * 1.17;
-    const canHuntPlayer = bot.mass > player.mass * 1.17;
-
-    if (danger) {
-        const awayX = bot.x - player.x;
-        const awayY = bot.y - player.y;
-        const len = Math.hypot(awayX, awayY) || 1;
-        bot.targetX = bot.x + (awayX / len) * 260;
-        bot.targetY = bot.y + (awayY / len) * 260;
-        return;
-    }
-
-    if (canHuntPlayer && Math.hypot(player.x - bot.x, player.y - bot.y) < 480) {
-        bot.targetX = player.x;
-        bot.targetY = player.y;
-        return;
-    }
-
-    const nearbyFood = foods.find((f) => Math.hypot(f.x - bot.x, f.y - bot.y) < 250);
-    if (nearbyFood) {
-        bot.targetX = nearbyFood.x;
-        bot.targetY = nearbyFood.y;
-        return;
-    }
-
-    bot.targetX = clamp(bot.x + randomBetween(-280, 280), 0, WORLD_WIDTH);
-    bot.targetY = clamp(bot.y + randomBetween(-280, 280), 0, WORLD_HEIGHT);
-}
-
-function updateBots(dt) {
-    for (const bot of bots) {
-        bot.aiTimer -= dt;
-        if (bot.aiTimer <= 0) {
-            chooseBotTarget(bot);
-            bot.aiTimer = randomBetween(0.2, 0.65);
-        }
-
-        const dx = bot.targetX - bot.x;
-        const dy = bot.targetY - bot.y;
-        const dist = Math.hypot(dx, dy) || 1;
-
-        const speed = clamp(185 / Math.pow(bot.mass, 0.22), 20, 150);
-        bot.vx = (dx / dist) * speed;
-        bot.vy = (dy / dist) * speed;
-
-        bot.x += bot.vx * dt;
-        bot.y += bot.vy * dt;
-
-        bot.x = clamp(bot.x, bot.r, WORLD_WIDTH - bot.r);
-        bot.y = clamp(bot.y, bot.r, WORLD_HEIGHT - bot.r);
-    }
-}
-
-function absorbFood(cell) {
-    for (let i = foods.length - 1; i >= 0; i -= 1) {
-        const f = foods[i];
-        const d = Math.hypot(cell.x - f.x, cell.y - f.y);
-        if (d < cell.r) {
-            cell.mass += f.value;
-            updateRadius(cell);
-            foods[i] = makeFood();
-            if (cell === player) {
-                scoreEl.textContent = String(Math.floor((player.mass - 40) * 5));
-            }
-        }
-    }
-}
-
-function canEat(a, b) {
-    return a.mass > b.mass * 1.15;
-}
-
-function resolveCellCollisions() {
-    const allCells = [player, ...bots];
-
-    for (let i = allCells.length - 1; i >= 0; i -= 1) {
-        const a = allCells[i];
-        for (let j = i - 1; j >= 0; j -= 1) {
-            const b = allCells[j];
-            const d = Math.hypot(a.x - b.x, a.y - b.y);
-            const overlap = d < Math.max(a.r, b.r) * 0.9;
-            if (!overlap) {
-                continue;
-            }
-
-            if (canEat(a, b)) {
-                a.mass += b.mass * 0.88;
-                updateRadius(a);
-                if (b === player) {
-                    endGame();
-                    return;
-                }
-                bots.splice(bots.indexOf(b), 1);
-                bots.push(
-                    makeCell({
-                        x: randomBetween(50, WORLD_WIDTH - 50),
-                        y: randomBetween(50, WORLD_HEIGHT - 50),
-                        mass: randomBetween(26, 75),
-                        color: `hsl(${Math.floor(randomBetween(0, 360))} 80% 60%)`,
-                        name: `BOT-${Math.floor(randomBetween(10, 99))}`,
-                        isBot: true,
-                    }),
-                );
-            } else if (canEat(b, a)) {
-                b.mass += a.mass * 0.88;
-                updateRadius(b);
-                if (a === player) {
-                    endGame();
-                    return;
-                }
-                bots.splice(bots.indexOf(a), 1);
-                bots.push(
-                    makeCell({
-                        x: randomBetween(50, WORLD_WIDTH - 50),
-                        y: randomBetween(50, WORLD_HEIGHT - 50),
-                        mass: randomBetween(26, 75),
-                        color: `hsl(${Math.floor(randomBetween(0, 360))} 80% 60%)`,
-                        name: `BOT-${Math.floor(randomBetween(10, 99))}`,
-                        isBot: true,
-                    }),
-                );
-            }
-        }
-    }
+  if (cell.r > 16) {
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.textAlign = 'center';
+    ctx.font = `600 ${Math.min(cell.r * 0.52, 15)}px sans-serif`;
+    ctx.fillText(actor.name, p.x, p.y + 4);
+  }
 }
 
 function updateHud() {
-    massEl.textContent = Math.floor(player.mass);
-    const elapsed = Math.floor((performance.now() - startTime) / 1000);
-    timeEl.textContent = `${elapsed}s`;
+  const me = findMe();
+  if (!me) return;
+
+  const totalMass = me.cells.reduce((sum, c) => sum + c.mass, 0);
+  scoreEl.textContent = String(Math.floor(me.score));
+  massEl.textContent = String(Math.floor(totalMass));
 }
 
-function drawFrame() {
-    const camera = getCamera();
+function updateLeaders() {
+  if (!state) return;
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawGrid(camera);
-    drawWorldBorder(camera);
-    drawFood(camera);
+  const sorted = [...state.players]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8);
 
-    for (const bot of bots) {
-        drawCell(bot, camera);
-    }
-    drawCell(player, camera);
+  leadersEl.innerHTML = '';
+  for (const p of sorted) {
+    const li = document.createElement('li');
+    li.textContent = `${p.name}: ${Math.floor(p.score)}`;
+    if (p.id === myId) li.style.color = '#6df4d0';
+    leadersEl.appendChild(li);
+  }
 }
 
-let last = 0;
-function tick(now) {
-    if (!running) {
-        return;
+function frame() {
+  requestAnimationFrame(frame);
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (!state) return;
+  const me = findMe();
+  if (!me) return;
+
+  const center = centerOf(me.cells);
+  const camera = {
+    x: center.x - canvas.width / 2,
+    y: center.y - canvas.height / 2,
+  };
+
+  drawGrid(camera);
+  drawBorder(camera);
+  drawFoods(camera);
+
+  for (const actor of state.players) {
+    for (const cell of actor.cells) {
+      drawCell(cell, actor, camera, actor.id === myId);
     }
-
-    const dt = clamp((now - last) / 1000, 0.001, 0.03);
-    last = now;
-
-    updatePlayer(dt);
-    updateBots(dt);
-
-    absorbFood(player);
-    for (const bot of bots) {
-        absorbFood(bot);
-    }
-
-    resolveCellCollisions();
-    if (!running) {
-        return;
-    }
-
-    updateHud();
-    drawFrame();
-
-    rafId = requestAnimationFrame(tick);
-}
-
-function endGame() {
-    running = false;
-    cancelAnimationFrame(rafId);
-    const survival = Math.floor((performance.now() - startTime) / 1000);
-    const score = Math.floor((player.mass - 40) * 5);
-    finalTextEl.textContent = `점수 ${score}점 · 생존 ${survival}초`;
-    gameOverEl.classList.remove('hidden');
-}
-
-function startGame() {
-    overlayEl.classList.add('hidden');
-    gameOverEl.classList.add('hidden');
-
-    resetGame();
-    scoreEl.textContent = '0';
-    massEl.textContent = '40';
-    timeEl.textContent = '0s';
-
-    startTime = performance.now();
-    last = performance.now();
-    running = true;
-    drawFrame();
-    rafId = requestAnimationFrame(tick);
+  }
 }
 
 canvas.addEventListener('mousemove', (event) => {
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    mouse.x = (event.clientX - rect.left) * scaleX;
-    mouse.y = (event.clientY - rect.top) * scaleY;
+  const rect = canvas.getBoundingClientRect();
+  const x = event.clientX - rect.left - rect.width / 2;
+  const y = event.clientY - rect.top - rect.height / 2;
+  const len = Math.hypot(x, y) || 1;
+
+  input.x = x / len;
+  input.y = y / len;
+  sendInput();
 });
 
-startBtn.addEventListener('click', startGame);
-restartBtn.addEventListener('click', startGame);
+window.addEventListener('keydown', (event) => {
+  if (event.code === 'Space' && keys.splitReady) {
+    sendAction('split');
+    keys.splitReady = false;
+  }
 
-resetGame();
-drawFrame();
+  if (event.code === 'KeyQ' && keys.ejectReady) {
+    sendAction('eject');
+    keys.ejectReady = false;
+  }
+});
+
+window.addEventListener('keyup', (event) => {
+  if (event.code === 'Space') keys.splitReady = true;
+  if (event.code === 'KeyQ') keys.ejectReady = true;
+});
+
+setInterval(sendInput, 60);
+frame();
