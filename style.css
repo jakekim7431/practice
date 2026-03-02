@@ -1,17 +1,113 @@
+:root {
+    --bg-start: #f4fbff;
+    --bg-end: #e7f2ff;
+    --text: #102a43;
+    --card: #ffffff;
+    --primary: #0b7285;
+    --primary-hover: #095c6b;
+    --border: #d9e4ec;
+}
+
+* {
+    box-sizing: border-box;
+}
+
 body {
-    font-family: sans-serif;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
+    margin: 0;
     min-height: 100vh;
-    background-color: #f0f0f0;
+    display: grid;
+    place-items: center;
+    font-family: "Noto Sans KR", system-ui, sans-serif;
+    color: var(--text);
+    background: linear-gradient(160deg, var(--bg-start), var(--bg-end));
+    padding: 24px;
+}
+
+.app {
+    width: min(680px, 100%);
 }
 
 h1 {
-    color: #333;
+    margin: 0;
+    font-size: clamp(1.7rem, 3vw, 2.2rem);
 }
 
-lotto-generator {
-    margin-top: 20px;
+.subtitle {
+    margin: 8px 0 18px;
+}
+
+.card,
+.history-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+}
+
+.numbers {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 16px;
+    min-height: 52px;
+}
+
+.ball {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-weight: 700;
+    color: #fff;
+}
+
+.tier-1 { background: #f59f00; }
+.tier-2 { background: #1c7ed6; }
+.tier-3 { background: #2b8a3e; }
+.tier-4 { background: #e03131; }
+.tier-5 { background: #5f3dc4; }
+
+.bonus {
+    margin: 0 0 14px;
+    font-weight: 600;
+}
+
+button {
+    border: 0;
+    border-radius: 10px;
+    background: var(--primary);
+    color: #fff;
+    font-size: 1rem;
+    padding: 11px 16px;
+    cursor: pointer;
+}
+
+button:hover {
+    background: var(--primary-hover);
+}
+
+.history-card {
+    margin-top: 16px;
+}
+
+h2 {
+    margin: 0 0 12px;
+    font-size: 1.15rem;
+}
+
+.history-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 8px;
+}
+
+.history-list li {
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #f8fbff;
+    font-size: 0.95rem;
 }

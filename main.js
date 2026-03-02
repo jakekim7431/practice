@@ -1,81 +1,64 @@
-class LottoGenerator extends HTMLElement {
-    constructor() {
-        super();
-        const shadow = this.attachShadow({ mode: 'open' });
+const drawBtn = document.getElementById('drawBtn');
+const numbersEl = document.getElementById('numbers');
+const bonusEl = document.getElementById('bonus');
+const historyEl = document.getElementById('history');
 
-        const template = document.createElement('template');
-        template.innerHTML = `
-            <style>
-                .wrapper {
-                    padding: 20px;
-                    border: 1px solid #ccc;
-                    border-radius: 8px;
-                    text-align: center;
-                    background-color: #fff;
-                }
-                button {
-                    padding: 10px 20px;
-                    font-size: 16px;
-                    cursor: pointer;
-                    border: none;
-                    border-radius: 4px;
-                    background-color: #007bff;
-                    color: #fff;
-                    margin-bottom: 20px;
-                }
-                .numbers {
-                    display: flex;
-                    justify-content: center;
-                    gap: 10px;
-                }
-                .number {
-                    width: 40px;
-                    height: 40px;
-                    border-radius: 50%;
-                    background-color: #f0f0f0;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-size: 18px;
-                    font-weight: bold;
-                }
-            </style>
-            <div class="wrapper">
-                <button>Generate Numbers</button>
-                <div class="numbers"></div>
-            </div>
-        `;
+const history = [];
 
-        shadow.appendChild(template.content.cloneNode(true));
-
-        const button = shadow.querySelector('button');
-        const numbersContainer = shadow.querySelector('.numbers');
-
-        button.addEventListener('click', () => {
-            const numbers = this.generateNumbers();
-            this.displayNumbers(numbers);
-        });
-    }
-
-    generateNumbers() {
-        const numbers = new Set();
-        while (numbers.size < 6) {
-            const randomNumber = Math.floor(Math.random() * 45) + 1;
-            numbers.add(randomNumber);
-        }
-        return Array.from(numbers);
-    }
-
-    displayNumbers(numbers) {
-        const numbersContainer = this.shadowRoot.querySelector('.numbers');
-        numbersContainer.innerHTML = '';
-        numbers.forEach(number => {
-            const numberElement = document.createElement('div');
-            numberElement.classList.add('number');
-            numberElement.textContent = number;
-            numbersContainer.appendChild(numberElement);
-        });
-    }
+function getTierClass(num) {
+    if (num <= 10) return 'tier-1';
+    if (num <= 20) return 'tier-2';
+    if (num <= 30) return 'tier-3';
+    if (num <= 40) return 'tier-4';
+    return 'tier-5';
 }
 
-customElements.define('lotto-generator', LottoGenerator);
+function generateLottoSet() {
+    const picks = new Set();
+
+    while (picks.size < 7) {
+        picks.add(Math.floor(Math.random() * 45) + 1);
+    }
+
+    const values = Array.from(picks);
+    const main = values.slice(0, 6).sort((a, b) => a - b);
+    const bonus = values[6];
+
+    return { main, bonus };
+}
+
+function renderBalls(numbers) {
+    numbersEl.innerHTML = '';
+
+    numbers.forEach((num) => {
+        const ball = document.createElement('span');
+        ball.className = `ball ${getTierClass(num)}`;
+        ball.textContent = String(num);
+        numbersEl.appendChild(ball);
+    });
+}
+
+function renderHistory() {
+    historyEl.innerHTML = '';
+
+    history.forEach((entry, index) => {
+        const li = document.createElement('li');
+        li.textContent = `${index + 1}회: ${entry.main.join(', ')} + 보너스 ${entry.bonus}`;
+        historyEl.appendChild(li);
+    });
+}
+
+function drawNumbers() {
+    const result = generateLottoSet();
+
+    renderBalls(result.main);
+    bonusEl.textContent = `보너스 번호: ${result.bonus}`;
+
+    history.unshift(result);
+    if (history.length > 5) {
+        history.pop();
+    }
+    renderHistory();
+}
+
+drawBtn.addEventListener('click', drawNumbers);
