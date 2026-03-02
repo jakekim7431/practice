@@ -13,6 +13,7 @@ let connected = false;
 
 const input = { x: 0, y: 0 };
 const keys = { splitReady: true, ejectReady: true };
+let dpr = 1;
 
 function wsUrl() {
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -62,6 +63,17 @@ function centerOf(cells) {
   if (!cells || cells.length === 0) return { x: 0, y: 0 };
   const sum = cells.reduce((acc, c) => ({ x: acc.x + c.x, y: acc.y + c.y }), { x: 0, y: 0 });
   return { x: sum.x / cells.length, y: sum.y / cells.length };
+}
+
+function resizeCanvas() {
+  const rect = canvas.getBoundingClientRect();
+  dpr = Math.min(window.devicePixelRatio || 1, 1.25);
+  const w = Math.max(900, Math.floor(rect.width * dpr));
+  const h = Math.max(520, Math.floor((rect.width * 0.57) * dpr));
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w;
+    canvas.height = h;
+  }
 }
 
 function worldToScreen(x, y, camera) {
@@ -162,9 +174,7 @@ function updateHud() {
 function updateLeaders() {
   if (!state) return;
 
-  const sorted = [...state.players]
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 8);
+  const sorted = state.leaders || [];
 
   leadersEl.innerHTML = '';
   for (const p of sorted) {
@@ -196,6 +206,10 @@ function frame() {
 
   for (const actor of state.players) {
     for (const cell of actor.cells) {
+      const p = worldToScreen(cell.x, cell.y, camera);
+      if (p.x < -cell.r - 20 || p.y < -cell.r - 20 || p.x > canvas.width + cell.r + 20 || p.y > canvas.height + cell.r + 20) {
+        continue;
+      }
       drawCell(cell, actor, camera, actor.id === myId);
     }
   }
@@ -209,7 +223,6 @@ canvas.addEventListener('mousemove', (event) => {
 
   input.x = x / len;
   input.y = y / len;
-  sendInput();
 });
 
 window.addEventListener('keydown', (event) => {
@@ -229,5 +242,8 @@ window.addEventListener('keyup', (event) => {
   if (event.code === 'KeyQ') keys.ejectReady = true;
 });
 
-setInterval(sendInput, 60);
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+setInterval(sendInput, 75);
 frame();

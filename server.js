@@ -8,10 +8,10 @@ const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
 
 const WORLD = { width: 5600, height: 3600 };
-const FOOD_COUNT = 520;
+const FOOD_COUNT = 320;
 const BOT_COUNT = 12;
 const TICK_MS = 1000 / 60;
-const SNAPSHOT_MS = 1000 / 20;
+const SNAPSHOT_MS = 1000 / 12;
 const MAX_PLAYER_CELLS = 16;
 
 const FOOD_COLORS = ['#ffd166', '#ff8c69', '#59d4c8', '#7ca8ff', '#ff7bb8'];
@@ -434,31 +434,92 @@ function tick(dt) {
   resolveCellEating();
 }
 
+function round1(v) {
+  return Math.round(v * 10) / 10;
+}
+
+function inView(obj, view) {
+  return (
+    obj.x + obj.r >= view.minX
+    && obj.x - obj.r <= view.maxX
+    && obj.y + obj.r >= view.minY
+    && obj.y - obj.r <= view.maxY
+  );
+}
+
 function snapshotFor(id) {
-  const actorList = getAllActors().map((a) => ({
-    id: a.id,
-    name: a.name,
-    color: a.color,
-    score: Math.floor(a.score),
-    isBot: a.isBot,
-    cells: a.cells.map((c) => ({
-      id: c.id,
-      x: c.x,
-      y: c.y,
-      r: c.r,
-      mass: c.mass,
-      sx: c.squashX,
-      sy: c.squashY,
-    })),
-  }));
+  const youActor = players.get(id);
+  if (!youActor) {
+    return { type: 'state', you: id, world: WORLD, players: [], foods: [], bonusOrbs: [], leaders: [] };
+  }
+
+  const cx = youActor.cells.reduce((sum, c) => sum + c.x, 0) / youActor.cells.length;
+  const cy = youActor.cells.reduce((sum, c) => sum + c.y, 0) / youActor.cells.length;
+  const view = {
+    minX: cx - 1200,
+    maxX: cx + 1200,
+    minY: cy - 800,
+    maxY: cy + 800,
+  };
+
+  const actorList = getAllActors()
+    .map((a) => {
+      const visibleCells = a.cells
+        .filter((c) => a.id === id || inView(c, view))
+        .map((c) => ({
+          id: c.id,
+          x: round1(c.x),
+          y: round1(c.y),
+          r: round1(c.r),
+          mass: round1(c.mass),
+          sx: round1(c.squashX),
+          sy: round1(c.squashY),
+        }));
+
+      if (visibleCells.length === 0) return null;
+
+      return {
+        id: a.id,
+        name: a.name,
+        color: a.color,
+        score: Math.floor(a.score),
+        isBot: a.isBot,
+        cells: visibleCells,
+      };
+    })
+    .filter(Boolean);
+
+  const visibleFoods = foods
+    .filter((f) => inView(f, view))
+    .map((f) => ({
+      x: round1(f.x),
+      y: round1(f.y),
+      r: round1(f.r),
+      color: f.color,
+    }));
+
+  const visibleBonus = bonusOrbs
+    .filter((o) => inView(o, view))
+    .map((o) => ({
+      x: round1(o.x),
+      y: round1(o.y),
+      r: o.r,
+      color: o.color,
+    }));
+
+  const leaders = getAllActors()
+    .map((a) => ({ id: a.id, name: a.name, score: Math.floor(a.score) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8);
 
   return {
     type: 'state',
     you: id,
     world: WORLD,
     players: actorList,
-    foods,
-    bonusOrbs,
+    foods: visibleFoods,
+    bonusOrbs: visibleBonus,
+    leaders,
     ts: Date.now(),
   };
 }
@@ -543,6 +604,7 @@ setInterval(() => {
 setInterval(() => {
   for (const client of wss.clients) {
     if (client.readyState !== 1) continue;
+    if (client.bufferedAmount > 500000) continue;
     const you = socketToPlayer.get(client);
     if (!you || !players.has(you)) continue;
     client.send(JSON.stringify(snapshotFor(you)));
