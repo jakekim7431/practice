@@ -2,8 +2,31 @@ const drawBtn = document.getElementById('drawBtn');
 const numbersEl = document.getElementById('numbers');
 const bonusEl = document.getElementById('bonus');
 const historyEl = document.getElementById('history');
+const themeBtn = document.getElementById('themeBtn');
 
 const history = [];
+const THEME_KEY = 'lotto-theme';
+
+function updateThemeButton(theme) {
+    themeBtn.textContent = theme === 'dark' ? '화이트 모드' : '다크 모드';
+}
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem(THEME_KEY, theme);
+    updateThemeButton(theme);
+}
+
+function initTheme() {
+    const savedTheme = localStorage.getItem(THEME_KEY);
+    if (savedTheme === 'dark' || savedTheme === 'light') {
+        applyTheme(savedTheme);
+        return;
+    }
+
+    const preferredDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    applyTheme(preferredDark ? 'dark' : 'light');
+}
 
 function getTierClass(num) {
     if (num <= 10) return 'tier-1';
@@ -62,3 +85,9 @@ function drawNumbers() {
 }
 
 drawBtn.addEventListener('click', drawNumbers);
+themeBtn.addEventListener('click', () => {
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+    applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
+});
+
+initTheme();

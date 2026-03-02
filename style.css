@@ -6,6 +6,18 @@
     --primary: #0b7285;
     --primary-hover: #095c6b;
     --border: #d9e4ec;
+    --history-bg: #f8fbff;
+}
+
+:root[data-theme="dark"] {
+    --bg-start: #0f172a;
+    --bg-end: #1f2937;
+    --text: #e2e8f0;
+    --card: #111827;
+    --primary: #22b8cf;
+    --primary-hover: #15aabf;
+    --border: #334155;
+    --history-bg: #0b1220;
 }
 
 * {
@@ -25,6 +37,13 @@ body {
 
 .app {
     width: min(680px, 100%);
+}
+
+.topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
 }
 
 h1 {
@@ -87,6 +106,11 @@ button:hover {
     background: var(--primary-hover);
 }
 
+.theme-btn {
+    padding: 8px 12px;
+    font-size: 0.9rem;
+}
+
 .history-card {
     margin-top: 16px;
 }
@@ -108,6 +132,6 @@ h2 {
     padding: 10px;
     border-radius: 8px;
     border: 1px solid var(--border);
-    background: #f8fbff;
+    background: var(--history-bg);
     font-size: 0.95rem;
 }
