@@ -3,28 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>로또 번호 추첨기</title>
+    <title>Cell Arena - Single Player</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <main class="app">
-        <div class="topbar">
-            <h1>로또 번호 추첨기</h1>
-            <button id="themeBtn" class="theme-btn" type="button" aria-label="테마 전환">다크 모드</button>
-        </div>
-        <p class="subtitle">1~45 중에서 중복 없이 6개 + 보너스 1개를 추첨합니다.</p>
+    <main class="game-shell">
+        <header class="hud">
+            <div class="stat">점수: <strong id="score">0</strong></div>
+            <div class="stat">질량: <strong id="mass">40</strong></div>
+            <div class="stat">생존 시간: <strong id="time">0s</strong></div>
+        </header>
 
-        <section class="card">
-            <div class="numbers" id="numbers" aria-live="polite"></div>
-            <p class="bonus" id="bonus">보너스 번호: -</p>
-            <button id="drawBtn" type="button">번호 추첨</button>
-        </section>
+        <section class="arena-wrap">
+            <canvas id="arena" width="1200" height="700" aria-label="Cell arena"></canvas>
 
-        <section class="history-card">
-            <h2>최근 추첨 기록</h2>
-            <ul id="history" class="history-list"></ul>
+            <div class="overlay" id="overlay">
+                <h1>Cell Arena</h1>
+                <p>마우스로 이동하고, 작은 셀을 먹어 성장하세요.</p>
+                <p>나보다 큰 셀에게 닿으면 게임 오버입니다.</p>
+                <button id="startBtn" type="button">게임 시작</button>
+            </div>
+
+            <div class="overlay hidden" id="gameOver">
+                <h2>게임 오버</h2>
+                <p id="finalText"></p>
+                <button id="restartBtn" type="button">다시 시작</button>
+            </div>
         </section>
     </main>
+
     <script src="main.js"></script>
 </body>
 </html>
